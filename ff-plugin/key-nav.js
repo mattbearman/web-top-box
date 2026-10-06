@@ -4,6 +4,11 @@
 
 // let focusedItem = null;
 
+const UP = 0;
+const DOWN = 1;
+const LEFT = 2;
+const RIGHT = 3;
+
 let debugSearchArea = null;
 
 // debugSearchArea = document.createElement('div');
@@ -20,15 +25,19 @@ let contentItems = document.querySelectorAll(contentItemSelectors);
 let narrowSearchContentItemSelectors, excludedContentItemSelectors;
 
 let focusedItem = contentItems.length > 0 ? contentItems[0] : null;
+let focusedItemBounds = null;
+
+function setFocussedItem(item) {
+  focusedItem = item;
+  focusedItemBounds = focusedItem.getBoundingClientRect();
+  focusedItem.focus();
+}
 
 function setInitialFocusedContentItemSelector(selector) {
   const item = document.querySelector(selector);
-
-  debugger
   
   if (item != null) {
-    focusedItem = item;
-    focusedItem.focus();
+    setFocussedItem(item);
   }
 }
 
@@ -69,6 +78,7 @@ function findNearestContentItem(bounds, measureFrom, measureToEdge) {
   let minDistance = Infinity;
 
   contentItems.forEach((item) => {
+    // TODO: precalculate this?
     if (item === focusedItem || item.checkVisibility({contentVisibilityAuto: true, opacityProperty: true, visibilityProperty: true}) === false) {
       return;
     }
@@ -90,6 +100,93 @@ function findNearestContentItem(bounds, measureFrom, measureToEdge) {
   });
 
   return nextItem;
+}
+
+// === This is a work in progress function, I think it's gonna replace findNearestContentItem (?) === \\
+// when moving up and down, prioritise items that are closer in the up/down direction somehow
+function findNearestFocussable(direction) {
+  let measureFromEdge = null;
+  let nextItem = null;
+  let minDistance = Infinity;
+
+  switch (direction) {
+    case UP:
+      measureFromEdge = 'down';
+      break;
+
+  const measureFrom = elementEdgeCenterPos(focusedItemBounds, measureFromEdge);
+
+  contentItems.forEach((item) => {
+    if (item === focusedItem || item.checkVisibility({contentVisibilityAuto: true, opacityProperty: true, visibilityProperty: true}) === false) {
+      return;
+    }
+
+    if (item.matches(excludedContentItemSelectors)) {
+      return;
+    }
+
+    const itemBounds = item.getBoundingClientRect();
+
+    switch (direction) {
+      case UP:
+        if (itemBounds.top >= focusedItemBounds.top) {
+          return;
+        }
+        break;
+
+      case DOWN:
+        if (itemBounds.bottom <= focusedItemBounds.bottom) {
+          return;
+        }
+        break;
+
+      case LEFT:
+        if (itemBounds.left >= focusedItemBounds.left) {
+          return;
+        }
+
+        // Exclude items that are not horizontally aligned with the focused item
+        if (!boundsAlignedHorizontally(focusedItemBounds, itemBounds)) {
+          return;
+        }
+
+        break;
+
+      case RIGHT:
+        if (itemBounds.right <= focusedItemBounds.right) {
+          return;
+        }
+
+        // Exclude items that are not horizontally aligned with the focused item
+        if (!boundsAlignedHorizontally(focusedItemBounds, itemBounds)) {
+          return;
+        }
+
+        break;
+    }
+
+    const itemPos = elementEdgeCenterPos(itemBounds, measureToEdge);
+    const distance = Math.hypot(itemPos.x - measureFromEdge.x, itemPos.y - measureFromEdge.y);
+      
+    if (distance < minDistance) {
+      minDistance = distance;
+      nextItem = item;
+    }
+  });
+
+  return nextItem;
+}
+
+function boundsAlignedHorizontally(bounds1, bounds2) {
+  if (
+    (bounds1.top <= bounds2.top && bounds1.bottom <= bounds2.top)
+    ||
+    (bounds1.top >= bounds2.bottom && bounds1.bottom >= bounds2.bottom)
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function elementCenterPos(element) {
@@ -197,8 +294,7 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   
-  focusedItem = nextItem;
-  focusedItem.focus();
+  setFocussedItem(nextItem);
 
   // scroll page to put focused item in the center of the viewport vertically
   const focusedItemCenter = elementCenterPos(focusedItem);
